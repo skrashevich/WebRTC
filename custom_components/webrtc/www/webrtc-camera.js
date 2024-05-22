@@ -1,6 +1,9 @@
 /** Chrome 63+, Safari 11.1+ */
-import {VideoRTC} from './video-rtc.js?v=1.8.0';
-import {DigitalPTZ} from './digital-ptz.js?v=3.3.0';
+import { VideoRTC } from './video-rtc.js?v=1.8.0';
+import { DigitalPTZ } from './digital-ptz.js?v=3.3.0';
+import { LitElement, html, css } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
+import { fireEvent } from 'custom-card-helpers';
 
 class WebRTCCamera extends VideoRTC {
     /**
@@ -64,7 +67,7 @@ class WebRTCCamera extends VideoRTC {
         this.config = Object.assign({
             mode: config.mse === false ? 'webrtc' : config.webrtc === false ? 'mse' : this.mode,
             media: this.media,
-            streams: [{url: config.url, entity: config.entity}],
+            streams: [{ url: config.url, entity: config.entity }],
             poster_remote: config.poster && (config.poster.indexOf('://') > 0 || config.poster.charAt(0) === '/'),
         }, config);
 
@@ -90,8 +93,12 @@ class WebRTCCamera extends VideoRTC {
      * @return {{url: string}}
      */
     static getStubConfig() {
-        return {'url': ''};
+        return { 'url': '' };
     }
+
+    static getConfigElement() {
+        return document.createElement("webrtc-camera-editor");
+      }
 
     setStatus(mode, status) {
         const divMode = this.querySelector('.mode').innerText;
@@ -202,7 +209,7 @@ class WebRTCCamera extends VideoRTC {
     }
 
     renderMain() {
-        const shadow = this.attachShadow({mode: 'open'});
+        const shadow = this.attachShadow({ mode: 'open' });
         shadow.innerHTML = `
         <style>
             ha-card {
@@ -270,7 +277,7 @@ class WebRTCCamera extends VideoRTC {
             this.querySelector('.player'),
             this.querySelector('.player .ptz-transform'),
             this.video,
-            Object.assign({}, this.config.digital_ptz, {persist_key: this.config.url})
+            Object.assign({}, this.config.digital_ptz, { persist_key: this.config.url })
         );
     }
 
@@ -405,7 +412,7 @@ class WebRTCCamera extends VideoRTC {
         const ptz = this.querySelector('.ptz');
         for (const [start, end] of [['touchstart', 'touchend'], ['mousedown', 'mouseup']]) {
             ptz.addEventListener(start, startEvt => {
-                const {className} = startEvt.target;
+                const { className } = startEvt.target;
                 startEvt.preventDefault();
                 handle('start_' + className);
                 window.addEventListener(end, endEvt => {
@@ -416,7 +423,7 @@ class WebRTCCamera extends VideoRTC {
                     } else {
                         handle(className);
                     }
-                }, {once: true});
+                }, { once: true });
             });
         }
     }
@@ -618,7 +625,7 @@ class WebRTCCamera extends VideoRTC {
                     cancelable: true,
                     composed: true,
                 });
-                event.detail = {entityId: value.more_info};
+                event.detail = { entityId: value.more_info };
                 ev.target.dispatchEvent(event);
             }
             if (value.service !== undefined) {
@@ -646,13 +653,212 @@ class WebRTCCamera extends VideoRTC {
     }
 }
 
+class WebRTCCameraEditor extends LitElement {
+    static get properties() {
+        return {
+            hass: { type: Object },
+            _config: { type: Object },
+            _helpers: { type: Object }
+        };
+    }
+
+    constructor() {
+        super();
+        this._config = {};
+        this._helpers = null;
+    }
+
+    connectedCallback() {
+        super.connectedCallback();
+        this.loadCardHelpers();
+    }
+
+    setConfig(config) {
+        this._config = config;
+    }
+
+    get _url() {
+        return this._config.url || '';
+    }
+
+    get _entity() {
+        return this._config.entity || '';
+    }
+
+    get _media() {
+        return this._config.media || 'video,audio';
+    }
+
+    get _server() {
+        return this._config.server || '';
+    }
+
+    get _ui() {
+        return this._config.ui !== false;
+    }
+
+    get _digital_ptz() {
+        return this._config.digital_ptz !== false;
+    }
+
+    get _shortcuts() {
+        return this._config.shortcuts || [];
+    }
+
+    async loadCardHelpers() {
+        if (this._helpers) return;
+        this._helpers = await window.loadCardHelpers();
+    }
+
+    render() {
+        if (!this.hass || !this._config) {
+            return html``;
+        }
+
+        return html`
+        <div class="card-config">
+          <paper-input
+            label="URL"
+            .value=${this._url}
+            .configValue=${'url'}
+            @value-changed=${this._valueChanged}
+          ></paper-input>
+          <ha-entity-picker
+            .hass=${this.hass}
+            .value=${this._entity}
+            .configValue=${'entity'}
+            @value-changed=${this._valueChanged}
+            domain-filter="camera"
+            label="Entity"
+          ></ha-entity-picker>
+          <paper-input
+            label="Media"
+            .value=${this._media}
+            .configValue=${'media'}
+            @value-changed=${this._valueChanged}
+          ></paper-input>
+          <paper-input
+            label="Server"
+            .value=${this._server}
+            .configValue=${'server'}
+            @value-changed=${this._valueChanged}
+          ></paper-input>
+          <ha-formfield label="UI">
+            <ha-switch
+              .checked=${this._ui}
+              .configValue=${'ui'}
+              @change=${this._valueChanged}
+            ></ha-switch>
+          </ha-formfield>
+          <ha-formfield label="Digital PTZ">
+            <ha-switch
+              .checked=${this._digital_ptz}
+              .configValue=${'digital_ptz'}
+              @change=${this._valueChanged}
+            ></ha-switch>
+          </ha-formfield>
+          ${this._shortcuts.map((shortcut, index) => html`
+            <div class="shortcut">
+              <paper-input
+                label="Shortcut Name"
+                .value=${shortcut.name}
+                .configValue=${`shortcut_name_${index}`}
+                @value-changed=${this._valueChanged}
+              ></paper-input>
+              <paper-input
+                label="Icon"
+                .value=${shortcut.icon}
+                .configValue=${`shortcut_icon_${index}`}
+                @value-changed=${this._valueChanged}
+              ></paper-input>
+              <paper-input
+                label="Service"
+                .value=${shortcut.service}
+                .configValue=${`shortcut_service_${index}`}
+                @value-changed=${this._valueChanged}
+              ></paper-input>
+              <paper-input
+                label="Service Data"
+                .value=${JSON.stringify(shortcut.service_data)}
+                .configValue=${`shortcut_service_data_${index}`}
+                @value-changed=${this._valueChanged}
+              ></paper-input>
+              <paper-icon-button
+                icon="hass:delete"
+                @click=${() => this._removeShortcut(index)}
+              ></paper-icon-button>
+            </div>
+          `)}
+          <mwc-button @click=${this._addShortcut}>Add Shortcut</mwc-button>
+        </div>
+      `;
+    }
+    _valueChanged(ev) {
+        if (!this._config || !this.hass) {
+            return;
+        }
+        const target = ev.target;
+        const value = target.value || target.checked;
+        const configValue = target.configValue;
+        if (this[`_${configValue}`] === value) {
+            return;
+        }
+
+        if (configValue.startsWith('shortcut_')) {
+            const index = parseInt(configValue.split('_')[2], 10);
+            const key = configValue.split('_')[1];
+            this._shortcuts[index][key] = value;
+            this._config = { ...this._config, shortcuts: [...this._shortcuts] };
+        } else {
+            this._config = { ...this._config, [configValue]: value };
+        }
+
+        fireEvent(this, 'config-changed', { config: this._config });
+    }
+
+    _addShortcut() {
+        const newShortcut = { name: '', icon: '', service: '', service_data: {} };
+        this._shortcuts = [...this._shortcuts, newShortcut];
+        this._config = { ...this._config, shortcuts: this._shortcuts };
+        fireEvent(this, 'config-changed', { config: this._config });
+    }
+
+    _removeShortcut(index) {
+        this._shortcuts.splice(index, 1);
+        this._config = { ...this._config, shortcuts: this._shortcuts };
+        fireEvent(this, 'config-changed', { config: this._config });
+    }
+
+    static get styles() {
+        return css`
+          .card-config {
+            display: flex;
+            flex-direction: column;
+          }
+          .shortcut {
+            display: flex;
+            align-items: center;
+          }
+          .shortcut paper-input {
+            flex: 1;
+            margin-right: 8px;
+          }
+          .shortcut paper-icon-button {
+            color: var(--secondary-text-color);
+          }
+        `;
+    }
+}
+
 customElements.define('webrtc-camera', WebRTCCamera);
+customElements.define('webrtc-camera-editor', WebRTCCameraEditor);
 
 const card = {
     type: 'webrtc-camera',
     name: 'WebRTC Camera',
     preview: false,
     description: 'WebRTC camera allows you to view the stream of almost any camera without delay',
+    documentationURL: "https://github.com/AlexxIT/WebRTC",
 };
 // Apple iOS 12 doesn't support `||=`
 if (window.customCards) window.customCards.push(card);
